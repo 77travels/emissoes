@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="330" viewBox="0 0 440 330">
+  <!-- 7 cinza sólido (itálico) -->
+  <polygon points="10,25 195,25 119,318 46,318 103,97 10,97" fill="#75849b"/>
+  <!-- 7 azul: barra + flâmula + perna -->
+  <g fill="#6cb2f0">
+    <polygon points="212,25 348,25 348,97 212,97"/>
+    <polygon points="346,12 436,60 346,140"/>
+    <polygon points="250,97 330,97 272,318 192,318"/>
+  </g>
+  <!-- avião branco dentro da barra azul -->
+  <g fill="#ffffff">
+    <polygon points="215,44 252,44 228,4 192,4"/>
+    <path d="M205,44 L352,44 L404,60 L352,76 L205,76 Q196,60 205,44 Z"/>
+    <polygon points="272,76 326,76 276,150 222,150"/>
+  </g>
+</svg>

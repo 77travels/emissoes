@@ -85,7 +85,7 @@
     root.innerHTML = `
       <div id="app">
         <aside class="sidebar">
-          <div class="brand"><img src="/logo.svg" alt="77 Travels"></div>
+          <div class="brand"><img src="/logo.png" alt="77 Travels"></div>
           <nav>
             ${navItems.map(([v, icon, label]) =>
               `<button data-view="${v}" class="${state.view === v ? 'active' : ''}">${icon} ${label}</button>`).join('')}
@@ -114,7 +114,7 @@
     root.innerHTML = `
       <div class="login-wrap">
         <div class="login-card">
-          <img src="/logo.svg" alt="77 Travels">
+          <img src="/logo.png" alt="77 Travels">
           <p class="sub">Gestão de Emissões de Passagens</p>
           <form id="loginForm">
             <label class="field">E-mail <input type="email" name="email" required autocomplete="username"></label>
