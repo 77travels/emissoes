@@ -1,0 +1,22 @@
+# Blueprint do Render — deploy em 1 clique:
+# https://render.com/deploy?repo=https://github.com/77travels/emissoes
+services:
+  - type: web
+    name: emissoes-77travels
+    runtime: node
+    plan: starter          # necessário para o disco persistente (banco de dados)
+    region: oregon
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /api/auth/me
+    disk:
+      name: dados
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    envVars:
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MASTER_INITIAL_PASSWORD
+        value: "77travels"
+      - key: NODE_ENV
+        value: production
