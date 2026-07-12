@@ -36,17 +36,30 @@ npm start               # http://localhost:3000
 
 ## Configurações importantes
 
-### OCR inteligente (recomendado)
+### OCR (local e gratuito — padrão)
 
-Defina `ANTHROPIC_API_KEY` no `.env` (chave em <https://platform.claude.com>). Com a
-chave, qualquer voucher (PDF ou imagem, de qualquer companhia) é lido com alta precisão.
-Sem a chave, o sistema usa OCR local (Tesseract) com regras de extração — funciona, mas
-exige mais conferência manual.
+O motor padrão é **100% local e gratuito**: `pdf-parse` para PDFs e `Tesseract` para
+fotos/imagens, seguido de **parsers calibrados com os modelos reais da agência**
+(`src/services/parsers.js`):
 
-**Como o sistema “aprende”:** quando o OCR errar em algum modelo de voucher, registre a
-regra correta em *Configurações → Aprendizado do OCR* (ex.: “No voucher da GOL o
-localizador aparece após ‘eTicket’”). As regras são aplicadas em todas as leituras
-seguintes.
+| Formato | Reconhecido por |
+| --- | --- |
+| Bilhete 77 Travels (LATAM/GOL) | `LOCALIZADOR` + `VISUALIZAR RESERVA` |
+| Bilhete GOL detalhado | `Bilhete` + `Localizador` + `VOO NNNN` |
+| Comprovante de compra LATAM | `Código da reserva` |
+| E-ticket internacional (Amadeus, ex. Qatar) | `Bookingref` / `ELECTRONIC TICKET RECEIPT` |
+
+Formatos desconhecidos caem em heurísticas genéricas (localizador, pares de aeroportos,
+datas e horários) — e os campos são sempre editáveis na tela.
+
+**Como o sistema “aprende” novos modelos:** envie uma amostra do novo
+voucher/comprovante para calibrarmos um parser dedicado em `src/services/parsers.js` —
+foi assim que os quatro formatos acima foram criados, todos validados com arquivos
+reais da agência.
+
+*(Opcional)* Para layouts nunca vistos, é possível ativar a leitura com IA definindo
+`OCR_ENGINE=claude` e `ANTHROPIC_API_KEY` no `.env` — é um serviço pago e fica
+**desligado** por padrão.
 
 ### Taxas do cartão
 

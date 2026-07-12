@@ -1,13 +1,17 @@
 // Extração dos dados do voucher / confirmação de compra (OCR).
 //
-// Caminho principal: API da Anthropic (Claude) com saída estruturada — lê PDFs e
-// imagens de qualquer companhia (LATAM, GOL, Azul, Smiles, TAP, ...) com alta
-// precisão. Requer ANTHROPIC_API_KEY no .env.
+// Motor padrão: OCR LOCAL e gratuito — pdf-parse para PDFs e Tesseract para
+// imagens, seguido de parsers calibrados com os modelos reais da agência
+// (bilhete 77 Travels LATAM/GOL, bilhete GOL detalhado, comprovante LATAM,
+// e-ticket internacional Amadeus/Qatar — ver src/services/parsers.js).
+// Formatos desconhecidos caem em heurísticas genéricas. Os campos são sempre
+// editáveis na tela.
 //
-// Fallback (sem chave): OCR local com Tesseract (imagens) / pdf-parse (PDFs) e
-// heurísticas de regex. Menor precisão — os campos são sempre editáveis na tela.
+// Opcional: defina OCR_ENGINE=claude e ANTHROPIC_API_KEY no .env para usar a
+// API da Anthropic (paga) — útil para layouts nunca vistos.
 
 const { getSetting } = require('../db');
+const { parseKnownFormats } = require('./parsers');
 
 const EXTRACTION_SCHEMA = {
   type: 'object',
@@ -145,12 +149,17 @@ function parseHeuristics(text) {
 
 async function extractLocal(buffer, mimetype) {
   const text = await ocrLocalText(buffer, mimetype);
+  // 1º: parsers calibrados com os modelos da agência
+  const known = parseKnownFormats(text);
+  if (known) return { ...known, raw_text: text, engine: `local:${known.format}` };
+  // 2º: heurísticas genéricas para layouts desconhecidos
   const parsed = parseHeuristics(text);
-  return { ...parsed, raw_text: text, engine: 'local' };
+  return { ...parsed, raw_text: text, engine: 'local:generico' };
 }
 
 async function extractVoucher(buffer, mimetype) {
-  if (process.env.ANTHROPIC_API_KEY) {
+  // A API da Anthropic só é usada se explicitamente ativada (OCR_ENGINE=claude).
+  if (process.env.OCR_ENGINE === 'claude' && process.env.ANTHROPIC_API_KEY) {
     try {
       return await extractWithClaude(buffer, mimetype);
     } catch (err) {

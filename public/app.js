@@ -590,9 +590,10 @@
         </div>`;
       hintsHTML = `
         <div class="card">
-          <h2>Aprendizado do OCR <span class="tag">dicas de extração</span></h2>
-          <p class="muted">Quando o OCR errar em algum modelo de voucher, descreva aqui a regra correta (ex.: “No voucher da GOL, o localizador aparece após 'eTicket'”). Essas regras são aplicadas em todas as próximas leituras — é assim que o sistema aprende com os vouchers enviados.</p>
-          <textarea id="fHints" rows="5" placeholder="Uma regra por linha…"></textarea>
+          <h2>OCR dos vouchers <span class="tag">local e gratuito</span></h2>
+          <p class="muted">A leitura é feita com OCR local (sem custo), com parsers calibrados para os modelos da agência: <strong>bilhete 77 Travels (LATAM/GOL)</strong>, <strong>bilhete GOL detalhado</strong>, <strong>comprovante de compra LATAM</strong> e <strong>e-ticket internacional (Amadeus/Qatar)</strong>. Para ensinar um novo modelo, envie uma amostra do arquivo para calibrarmos um novo parser.</p>
+          <p class="muted">O campo abaixo só é usado se a leitura com IA estiver ativada no servidor (<code>OCR_ENGINE=claude</code>): são regras extras passadas à IA a cada leitura.</p>
+          <textarea id="fHints" rows="4" placeholder="Uma regra por linha… (usado apenas com OCR_ENGINE=claude)"></textarea>
           <button class="btn mt" id="btnSaveHints">Salvar regras</button>
         </div>`;
       usersHTML = `
