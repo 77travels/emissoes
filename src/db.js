@@ -1,16 +1,55 @@
+// Camada de banco de dados — libsql/SQLite.
+//
+// Local (padrão): arquivo data/emissoes.db.
+// Nuvem (hospedagem gratuita): defina TURSO_DATABASE_URL e TURSO_AUTH_TOKEN no
+// ambiente — o banco passa a viver no Turso (turso.tech, plano gratuito) e os
+// dados sobrevivem a reinícios/redeploys de hosts com disco efêmero (Render Free).
+
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
+const { createClient } = require('@libsql/client');
 const bcrypt = require('bcryptjs');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-fs.mkdirSync(DATA_DIR, { recursive: true });
+const MASTER_EMAIL = 'gestao@77travels.com.br';
 
-const db = new Database(path.join(DATA_DIR, 'emissoes.db'));
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+let url = process.env.TURSO_DATABASE_URL;
+if (!url) {
+  const DATA_DIR = path.join(__dirname, '..', 'data');
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  url = 'file:' + path.join(DATA_DIR, 'emissoes.db');
+}
 
-db.exec(`
+const client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+
+// ── helpers de consulta ──────────────────────────────────────────────────────
+async function all(sql, args = []) {
+  const res = await client.execute({ sql, args });
+  return res.rows;
+}
+async function get(sql, args = []) {
+  const rows = await all(sql, args);
+  return rows[0] || null;
+}
+async function run(sql, args = []) {
+  const res = await client.execute({ sql, args });
+  return { changes: res.rowsAffected, lastInsertRowid: res.lastInsertRowid == null ? null : Number(res.lastInsertRowid) };
+}
+// várias escritas atômicas
+async function batchRun(statements) {
+  return client.batch(statements.map((s) => (typeof s === 'string' ? s : { sql: s.sql, args: s.args || [] })), 'write');
+}
+
+// Data/hora no fuso da agência (America/Sao_Paulo), formato "YYYY-MM-DD HH:MM:SS".
+function nowBR() {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(new Date()).replace('T', ' ');
+}
+
+// ── esquema + seeds ──────────────────────────────────────────────────────────
+const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -31,25 +70,22 @@ CREATE TABLE IF NOT EXISTS suppliers (
 
 CREATE TABLE IF NOT EXISTS emissions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  -- capturado por OCR (editável)
-  passengers TEXT NOT NULL DEFAULT '[]',      -- JSON: ["NOME", ...]
+  passengers TEXT NOT NULL DEFAULT '[]',
   locator TEXT NOT NULL DEFAULT '',
   airline TEXT NOT NULL DEFAULT '',
-  segments TEXT NOT NULL DEFAULT '[]',        -- JSON: [{direction,date,origin,destination,departure_time,arrival_time,flight_number}]
-  ocr_raw TEXT,                               -- texto bruto extraído, para auditoria
-  -- preenchido manualmente
-  program TEXT NOT NULL DEFAULT '',           -- programa de fidelidade
+  segments TEXT NOT NULL DEFAULT '[]',
+  ocr_raw TEXT,
+  program TEXT NOT NULL DEFAULT '',
   supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL,
   supplier_name TEXT NOT NULL DEFAULT '',
   supplier_phone TEXT NOT NULL DEFAULT '',
   miles_qty REAL NOT NULL DEFAULT 0,
-  cost_per_thousand REAL NOT NULL DEFAULT 0,  -- custo do milheiro (R$)
-  taxes REAL NOT NULL DEFAULT 0,              -- taxas de embarque (R$)
-  amount_charged REAL NOT NULL DEFAULT 0,     -- valor cobrado do cliente (R$)
+  cost_per_thousand REAL NOT NULL DEFAULT 0,
+  taxes REAL NOT NULL DEFAULT 0,
+  amount_charged REAL NOT NULL DEFAULT 0,
   payment_method TEXT NOT NULL DEFAULT 'pix' CHECK (payment_method IN ('pix','cartao')),
   gateway TEXT CHECK (gateway IN ('mercadopago','cielo')),
   installments INTEGER NOT NULL DEFAULT 1,
-  -- calculado pelo sistema
   card_fee_pct REAL NOT NULL DEFAULT 0,
   card_fee_value REAL NOT NULL DEFAULT 0,
   miles_cost REAL NOT NULL DEFAULT 0,
@@ -57,8 +93,8 @@ CREATE TABLE IF NOT EXISTS emissions (
   net_profit REAL NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS card_fees (
@@ -72,39 +108,48 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
-`);
+`;
 
-// ── seeds ────────────────────────────────────────────────────────────────────
-const MASTER_EMAIL = 'gestao@77travels.com.br';
-const hasMaster = db.prepare('SELECT 1 FROM users WHERE role = ?').get('master');
-if (!hasMaster) {
-  const initial = process.env.MASTER_INITIAL_PASSWORD || '77travels';
-  db.prepare('INSERT INTO users (email, name, password_hash, role) VALUES (?,?,?,?)')
-    .run(MASTER_EMAIL, 'Gestão 77 Travels', bcrypt.hashSync(initial, 10), 'master');
-  console.log(`[db] Usuário master criado: ${MASTER_EMAIL} (senha inicial definida em MASTER_INITIAL_PASSWORD)`);
-}
+let ready = null;
 
-// Tabela de taxas padrão (placeholder) — a agência ajusta em Configurações com
-// as taxas reais de cada transação do Mercado Pago e da Cielo.
-const feeCount = db.prepare('SELECT COUNT(*) AS n FROM card_fees').get().n;
-if (feeCount === 0) {
-  const ins = db.prepare('INSERT INTO card_fees (gateway, installments, pct) VALUES (?,?,?)');
-  const seed = db.transaction(() => {
+async function init() {
+  await client.executeMultiple(SCHEMA);
+
+  const hasMaster = await get('SELECT 1 AS ok FROM users WHERE role = ?', ['master']);
+  if (!hasMaster) {
+    const initial = process.env.MASTER_INITIAL_PASSWORD || '77travels';
+    await run('INSERT INTO users (email, name, password_hash, role) VALUES (?,?,?,?)',
+      [MASTER_EMAIL, 'Gestão 77 Travels', bcrypt.hashSync(initial, 10), 'master']);
+    console.log(`[db] Usuário master criado: ${MASTER_EMAIL} (senha inicial definida em MASTER_INITIAL_PASSWORD)`);
+  }
+
+  const feeCount = await get('SELECT COUNT(*) AS n FROM card_fees');
+  if (Number(feeCount.n) === 0) {
+    const stmts = [];
     for (const gw of ['mercadopago', 'cielo']) {
-      for (let i = 1; i <= 12; i++) ins.run(gw, i, 0);
+      for (let i = 1; i <= 12; i++) {
+        stmts.push({ sql: 'INSERT INTO card_fees (gateway, installments, pct) VALUES (?,?,?)', args: [gw, i, 0] });
+      }
     }
-  });
-  seed();
+    await batchRun(stmts);
+  }
+  console.log(`[db] Banco pronto (${url.startsWith('file:') ? 'arquivo local' : 'Turso'})`);
 }
 
-// ── settings helpers ─────────────────────────────────────────────────────────
-function getSetting(key) {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+// init único, aguardável de qualquer módulo
+function ensureReady() {
+  if (!ready) ready = init();
+  return ready;
+}
+
+// ── settings ─────────────────────────────────────────────────────────────────
+async function getSetting(key) {
+  const row = await get('SELECT value FROM settings WHERE key = ?', [key]);
   return row ? row.value : null;
 }
-function setSetting(key, value) {
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run(key, value == null ? null : String(value));
+async function setSetting(key, value) {
+  await run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [key, value == null ? null : String(value)]);
 }
 
-module.exports = { db, getSetting, setSetting, MASTER_EMAIL };
+module.exports = { all, get, run, batchRun, nowBR, ensureReady, getSetting, setSetting, MASTER_EMAIL };

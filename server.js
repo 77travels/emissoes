@@ -4,7 +4,7 @@ const path = require('path');
 const express = require('express');
 const session = require('express-session');
 
-require('./src/db'); // inicializa o banco e o usuário master
+const db = require('./src/db');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -41,6 +41,13 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`77 Travels — Gestão de Emissões rodando em http://localhost:${PORT}`);
-});
+db.ensureReady()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`77 Travels — Gestão de Emissões rodando em http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('[db] Falha ao inicializar o banco:', err);
+    process.exit(1);
+  });

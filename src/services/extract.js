@@ -59,7 +59,7 @@ async function extractWithClaude(buffer, mimetype) {
 
   // "Dicas de extração" configuráveis: exemplos/regras que a agência acumula
   // conforme envia novos modelos de voucher (é assim que o sistema "aprende").
-  const hints = getSetting('extraction_hints') || '';
+  const hints = (await getSetting('extraction_hints')) || '';
 
   const response = await client.messages.create({
     model: 'claude-opus-4-8',

@@ -84,17 +84,39 @@ emissões* refaz a sincronização quando necessário.
 
 ## Hospedagem online
 
-O sistema é um único serviço Node.js com banco SQLite (arquivo `data/emissoes.db`).
-Qualquer host com Node 18+ e disco persistente funciona — por exemplo Railway, Render,
-Fly.io ou uma VPS:
+O sistema é um único serviço Node.js. O banco usa libsql/SQLite: **arquivo local**
+(`data/emissoes.db`) por padrão, ou **Turso** (SQLite na nuvem) quando
+`TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` estão definidos.
+
+### Opção gratuita (recomendada): Render Free + Turso Free
+
+No plano gratuito do Render o disco é apagado a cada reinício — por isso o banco
+vai para o Turso, que guarda os dados de forma permanente (plano gratuito de 5 GB,
+sem cartão de crédito). Passo a passo:
+
+1. **Turso** — acesse <https://turso.tech>, entre com o GitHub, crie um banco
+   (ex.: `emissoes-77travels`) e copie a **URL** (`libsql://...turso.io`) e um
+   **token** do banco (botão *Create Token*).
+2. **Render** — acesse <https://render.com>, entre com o GitHub e abra
+   <https://render.com/deploy?repo=https://github.com/77travels/emissoes>.
+   O Render lê o `render.yaml` e pede os dois valores do Turso; cole-os e confirme.
+3. Em ~3 minutos o sistema está no ar em `https://emissoes-77travels.onrender.com`.
+
+Observação do plano gratuito: o serviço "dorme" após ~15 min sem uso e a primeira
+visita seguinte demora ~30-60 s para acordar. Os dados ficam seguros no Turso.
+
+### Outras opções
+
+Qualquer host com Node 18+ (ou Docker, via `Dockerfile` incluído) funciona —
+Railway, Fly.io, VPS. Com disco persistente, o Turso é dispensável (o banco fica
+no arquivo local).
 
 ```bash
-# em produção
 NODE_ENV=production PORT=3000 node server.js
 ```
 
-Recomendações: use HTTPS (o cookie de sessão fica `secure` automaticamente atrás de
-proxy), defina um `SESSION_SECRET` forte e faça backup periódico da pasta `data/`.
+Recomendações: HTTPS (o cookie de sessão fica `secure` automaticamente atrás de
+proxy) e um `SESSION_SECRET` forte.
 
 ## Estrutura
 

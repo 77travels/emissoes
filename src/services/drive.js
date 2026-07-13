@@ -40,21 +40,23 @@ function getOAuthClient() {
   );
 }
 
-function getAuthorizedClient() {
-  const raw = getSetting('google_tokens');
+async function getAuthorizedClient() {
+  const raw = await getSetting('google_tokens');
   if (!raw) return null;
   const client = getOAuthClient();
   client.setCredentials(JSON.parse(raw));
   // Persiste tokens renovados automaticamente
-  client.on('tokens', (tokens) => {
-    const current = JSON.parse(getSetting('google_tokens') || '{}');
-    setSetting('google_tokens', JSON.stringify({ ...current, ...tokens }));
+  client.on('tokens', async (tokens) => {
+    try {
+      const current = JSON.parse((await getSetting('google_tokens')) || '{}');
+      await setSetting('google_tokens', JSON.stringify({ ...current, ...tokens }));
+    } catch (e) { console.error('[drive] falha ao salvar tokens renovados:', e.message); }
   });
   return client;
 }
 
-function isConnected() {
-  return Boolean(getSetting('google_tokens'));
+async function isConnected() {
+  return Boolean(await getSetting('google_tokens'));
 }
 
 function getAuthUrl() {
@@ -68,12 +70,12 @@ function getAuthUrl() {
 async function handleCallback(code) {
   const client = getOAuthClient();
   const { tokens } = await client.getToken(code);
-  setSetting('google_tokens', JSON.stringify(tokens));
+  await setSetting('google_tokens', JSON.stringify(tokens));
 }
 
-function disconnect() {
-  setSetting('google_tokens', null);
-  setSetting('drive_root_id', null);
+async function disconnect() {
+  await setSetting('google_tokens', null);
+  await setSetting('drive_root_id', null);
 }
 
 async function findOrCreateFolder(drive, name, parentId) {
@@ -106,7 +108,7 @@ async function findOrCreateMonthlySheet(auth, dateISO) {
   const sheetName = `Emissões ${year}-${monthNum} (${MONTHS_PT[d.getMonth()]})`;
 
   const rootId = await findOrCreateFolder(drive, 'Emissões 77 Travels', null);
-  setSetting('drive_root_id', rootId);
+  await setSetting('drive_root_id', rootId);
   const yearId = await findOrCreateFolder(drive, year, rootId);
 
   const q = `name = '${sheetName}' and mimeType = 'application/vnd.google-apps.spreadsheet' and '${yearId}' in parents and trashed = false`;
@@ -152,7 +154,7 @@ function emissionToRow(e, changeLink) {
 
 // Acrescenta (ou atualiza) a linha da emissão na planilha do mês correspondente.
 async function syncEmission(emission, changeLink) {
-  const auth = getAuthorizedClient();
+  const auth = await getAuthorizedClient();
   if (!auth) return { synced: false, reason: 'Google Drive não conectado' };
 
   const spreadsheetId = await findOrCreateMonthlySheet(auth, emission.created_at);
