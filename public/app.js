@@ -241,13 +241,16 @@
       $$('#paxChips button').forEach((b) => b.onclick = () => { f.passengers.splice(Number(b.dataset.i), 1); renderPax(); });
     };
     renderPax();
-    $('#paxInput').onkeydown = (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const v = e.target.value.trim().toUpperCase();
-        if (v) { f.passengers.push(v); e.target.value = ''; renderPax(); }
-      }
-    };
+    const paxInputEl = $('#paxInput');
+    if (paxInputEl) {
+      paxInputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const v = e.target.value.trim().toUpperCase();
+          if (v) { f.passengers.push(v); e.target.value = ''; renderPax(); }
+        }
+      });
+    }
 
     // trechos
     const renderSegs = () => {
