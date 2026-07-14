@@ -617,11 +617,41 @@
         </div>`;
     }
 
+    let masterProfileHTML = '';
+    if (state.user.role === 'master') {
+      masterProfileHTML = `
+        <div class="card">
+          <h2>Perfil do Master</h2>
+          <div class="grid c2">
+            <label class="field">Nome <input id="masterName" value="${esc(state.user.name)}"></label>
+            <label class="field">&nbsp;<button class="btn" id="btnMasterName">Salvar nome</button></label>
+          </div>
+        </div>`;
+    }
+
+    let ocrSamplesHTML = '';
+    if (isAdmin) {
+      ocrSamplesHTML = `
+        <div class="card">
+          <h2>Amostras de OCR <span class="tag">calibração de novos parsers</span></h2>
+          <p class="muted">Envie uma amostra de um novo tipo de bilhete ou comprovante. Analisaremos e criaremos um parser dedicado para melhorar o reconhecimento automático.</p>
+          <div class="grid c2 mt">
+            <label class="field">Arquivo (PDF/Imagem) <input id="ocrFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp"></label>
+            <label class="field">Tipo de bilhete <input id="ocrFormat" placeholder="ex: Azul, Air Canada, Aeromexico"></label>
+          </div>
+          <label class="field mt">Observações <textarea id="ocrNotes" rows="3" placeholder="Descreva quaisquer detalhes especiais deste formato..."></textarea></label>
+          <button class="btn mt" id="btnUploadOCR">Enviar amostra</button>
+          <div id="ocrList" class="mt"></div>
+        </div>`;
+    }
+
     body.innerHTML = `
       ${feesHTML}
       ${driveHTML}
       ${hintsHTML}
       ${usersHTML}
+      ${masterProfileHTML}
+      ${ocrSamplesHTML}
       <div class="card">
         <h2>Minha senha</h2>
         <div class="grid c3">
@@ -732,6 +762,72 @@
           toast('Usuário criado.');
           renderUsers();
         } catch (err) { toast(err.message, true); }
+      };
+    }
+
+    // perfil do master
+    if (state.user.role === 'master') {
+      $('#btnMasterName').onclick = async () => {
+        try {
+          const newName = $('#masterName').value.trim();
+          if (!newName) return toast('Informe um nome.', true);
+          await api('/api/users/master/profile', { method: 'PATCH', body: { name: newName } });
+          state.user.name = newName;
+          toast('Nome atualizado.');
+        } catch (err) { toast(err.message, true); }
+      };
+    }
+
+    // amostras de OCR
+    if (isAdmin) {
+      const loadOCRSamples = async () => {
+        try {
+          const { samples } = await api('/api/settings/ocr-samples');
+          const list = $('#ocrList');
+          if (!samples.length) {
+            list.innerHTML = '<p class="muted">Nenhuma amostra enviada ainda.</p>';
+            return;
+          }
+          list.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>Arquivo</th><th>Tipo</th><th>Data</th><th></th></tr></thead>
+            <tbody>${samples.map((s) => `
+              <tr>
+                <td>${esc(s.filename)}</td>
+                <td>${esc(s.format_type || 'Não definido')}</td>
+                <td>${dateBR(s.created_at)}</td>
+                <td class="right"><button class="btn sm danger" data-del-ocr="${s.id}">Excluir</button></td>
+              </tr>`).join('')}</tbody>
+          </table></div>`;
+          $$('button[data-del-ocr]').forEach((b) => b.onclick = async () => {
+            if (!confirm('Excluir esta amostra?')) return;
+            try { await api('/api/settings/ocr-samples/' + b.dataset.delOcr, { method: 'DELETE' }); loadOCRSamples(); toast('Amostra excluída.'); }
+            catch (err) { toast(err.message, true); }
+          });
+        } catch (err) { $('#ocrList').innerHTML = `<p class="muted">${esc(err.message)}</p>`; }
+      };
+      loadOCRSamples();
+
+      $('#btnUploadOCR').onclick = async () => {
+        const file = $('#ocrFile').files[0];
+        const format = $('#ocrFormat').value.trim();
+        const notes = $('#ocrNotes').value.trim();
+        if (!file) return toast('Selecione um arquivo.', true);
+        if (!format) return toast('Informe o tipo de bilhete.', true);
+
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('format_type', format);
+        fd.append('notes', notes);
+
+        const btn = $('#btnUploadOCR');
+        btn.disabled = true;
+        try {
+          await api('/api/settings/ocr-samples', { method: 'POST', body: fd });
+          $('#ocrFile').value = $('#ocrFormat').value = $('#ocrNotes').value = '';
+          toast('Amostra enviada! Analisaremos e criaremos um novo parser se necessário.');
+          loadOCRSamples();
+        } catch (err) { toast(err.message, true); }
+        finally { btn.disabled = false; }
       };
     }
 

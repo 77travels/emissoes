@@ -1,8 +1,10 @@
 const express = require('express');
+const multer = require('multer');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../auth');
 
 const router = express.Router();
+const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } });
 
 // Tabela de taxas de cartão — leitura para todos (o formulário usa para
 // calcular em tempo real); edição apenas master/admin.
@@ -37,6 +39,42 @@ router.get('/extraction-hints', requireRole('master', 'admin'), async (req, res,
 router.put('/extraction-hints', requireRole('master', 'admin'), async (req, res, next) => {
   try {
     await db.setSetting('extraction_hints', String((req.body && req.body.hints) || ''));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// Upload de amostras de bilhetes/comprovantes para calibração de novos parsers
+router.post('/ocr-samples', requireRole('master', 'admin'), upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo foi enviado' });
+    }
+    const { format_type, notes } = req.body || {};
+
+    await db.run(
+      'INSERT INTO ocr_samples (filename, file_data, format_type, notes, uploaded_by) VALUES (?,?,?,?,?)',
+      [req.file.originalname, req.file.buffer, String(format_type || ''), String(notes || ''), req.session.user.id]
+    );
+    res.json({ ok: true, message: 'Amostra enviada com sucesso. Analisaremos e criaremos um novo parser se necessário.' });
+  } catch (e) { next(e); }
+});
+
+// Listar amostras enviadas
+router.get('/ocr-samples', requireRole('master', 'admin'), async (req, res, next) => {
+  try {
+    const samples = await db.all(
+      'SELECT id, filename, format_type, notes, uploaded_by, created_at FROM ocr_samples ORDER BY created_at DESC'
+    );
+    res.json({ samples });
+  } catch (e) { next(e); }
+});
+
+// Deletar amostra
+router.delete('/ocr-samples/:id', requireRole('master', 'admin'), async (req, res, next) => {
+  try {
+    const sample = await db.get('SELECT id FROM ocr_samples WHERE id = ?', [req.params.id]);
+    if (!sample) return res.status(404).json({ error: 'Amostra não encontrada' });
+    await db.run('DELETE FROM ocr_samples WHERE id = ?', [req.params.id]);
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

@@ -76,4 +76,18 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.patch('/master/profile', requireRole('master'), async (req, res, next) => {
+  try {
+    const { name, password } = req.body || {};
+    if (name) {
+      await db.run('UPDATE users SET name = ? WHERE id = ?', [String(name).trim(), req.session.user.id]);
+    }
+    if (password) {
+      if (password.length < 6) return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
+      await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [bcrypt.hashSync(password, 10), req.session.user.id]);
+    }
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

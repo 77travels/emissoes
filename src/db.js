@@ -108,6 +108,16 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS ocr_samples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename TEXT NOT NULL,
+  file_data BLOB NOT NULL,
+  format_type TEXT,
+  notes TEXT,
+  uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 let ready = null;
@@ -119,7 +129,7 @@ async function init() {
   if (!hasMaster) {
     const initial = process.env.MASTER_INITIAL_PASSWORD || '77travels';
     await run('INSERT INTO users (email, name, password_hash, role) VALUES (?,?,?,?)',
-      [MASTER_EMAIL, 'Gestão 77 Travels', bcrypt.hashSync(initial, 10), 'master']);
+      [MASTER_EMAIL, 'Hugo Mendes', bcrypt.hashSync(initial, 10), 'master']);
     console.log(`[db] Usuário master criado: ${MASTER_EMAIL} (senha inicial definida em MASTER_INITIAL_PASSWORD)`);
   }
 
