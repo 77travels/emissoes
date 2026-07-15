@@ -241,16 +241,24 @@
       $$('#paxChips button').forEach((b) => b.onclick = () => { f.passengers.splice(Number(b.dataset.i), 1); renderPax(); });
     };
     renderPax();
-    const paxInputEl = $('#paxInput');
-    if (paxInputEl) {
-      paxInputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const v = e.target.value.trim().toUpperCase();
-          if (v) { f.passengers.push(v); e.target.value = ''; renderPax(); }
-        }
-      });
-    }
+
+    // Adicionar passageiros via Enter
+    setTimeout(() => {
+      const paxInput = $('#paxInput');
+      if (paxInput) {
+        paxInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const v = paxInput.value.trim().toUpperCase();
+            if (v && !f.passengers.includes(v)) {
+              f.passengers.push(v);
+              paxInput.value = '';
+              renderPax();
+            }
+          }
+        });
+      }
+    }, 100);
 
     // trechos
     const renderSegs = () => {
